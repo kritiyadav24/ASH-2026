@@ -493,7 +493,53 @@ print(round(exp(cbind(OR = coef(model_lymph),
                       confint(model_lymph))), 3))
 
 
-# ----- 14. TREND ANALYSIS BY YEAR -----
+# ----- 14. LEUKEMIA VS LYMPHOMA: DIRECT COMPARISON -----
+# This is one of the strongest, best-powered findings in this analysis
+# (346 leukemia-only vs. 706 lymphoma-only survivors -- far larger
+# subgroups than any racial category here). Unlike the race_eth
+# comparisons above, cancer type is compared head-to-head as the
+# exposure of interest, adjusting for demographic/SES confounders.
+cat("\n========== LEUKEMIA VS LYMPHOMA: DIRECT COMPARISON ==========\n")
+
+svy_leuk_lymph <- subset(svy_design, heme_type %in% c("Leukemia only", "Lymphoma only"))
+
+cat("\nWeighted vaccination prevalence by cancer type:\n")
+print(svyby(~pneumo_vax, ~heme_type, svy_heme, svymean, na.rm = TRUE))
+print(svyby(~flu_vax,    ~heme_type, svy_heme, svymean, na.rm = TRUE))
+
+cat("\nWeighted mean age by cancer type:\n")
+print(svyby(~AGE, ~heme_type, svy_heme, svymean, na.rm = TRUE))
+
+# Unadjusted: lymphoma vs. leukemia (reference = leukemia only)
+cat("\nPneumococcal, unadjusted (ref = leukemia only):\n")
+model_pneumo_type_unadj <- svyglm(pneumo_vax ~ heme_type, design = svy_leuk_lymph, family = quasibinomial())
+print(round(exp(cbind(OR = coef(model_pneumo_type_unadj), confint(model_pneumo_type_unadj))), 3))
+
+cat("\nFlu, unadjusted (ref = leukemia only):\n")
+model_flu_type_unadj <- svyglm(flu_vax ~ heme_type, design = svy_leuk_lymph, family = quasibinomial())
+print(round(exp(cbind(OR = coef(model_flu_type_unadj), confint(model_flu_type_unadj))), 3))
+
+# Adjusted for race, age, sex, insurance, poverty, education, usual
+# care, and region -- the same confounder set used in the primary and
+# secondary analyses above.
+cat("\nPneumococcal, ADJUSTED for race/age/sex/insurance/poverty/education/usual care/region:\n")
+model_pneumo_type_adj <- svyglm(
+  pneumo_vax ~ heme_type + race_eth + AGE + sex + insured + poverty_cat +
+               educ_cat + usual_care + region,
+  design = svy_leuk_lymph, family = quasibinomial()
+)
+print(round(exp(cbind(OR = coef(model_pneumo_type_adj), confint(model_pneumo_type_adj))), 3))
+
+cat("\nFlu, ADJUSTED for race/age/sex/insurance/poverty/education/usual care/region:\n")
+model_flu_type_adj <- svyglm(
+  flu_vax ~ heme_type + race_eth + AGE + sex + insured + poverty_cat +
+            educ_cat + usual_care + region,
+  design = svy_leuk_lymph, family = quasibinomial()
+)
+print(round(exp(cbind(OR = coef(model_flu_type_adj), confint(model_flu_type_adj))), 3))
+
+
+# ----- 15. TREND ANALYSIS BY YEAR -----
 cat("\n========== VACCINATION TRENDS BY YEAR ==========\n")
 
 pneumo_trend <- svyby(~pneumo_vax, ~YEAR, svy_heme,

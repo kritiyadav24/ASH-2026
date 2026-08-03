@@ -3,11 +3,46 @@ Pooled, survey-weighted results from scripts/nhis_vaccination_disparities.R
 run against a real IPUMS NHIS extract (nhis_00004, years 2016-2024,
 restricted to 2019-2024 for this analysis).
 
-See README.md "Known limitations for this extract" before interpreting.
+See README.md "Known issues fixed" and "Caveats" before interpreting.
+
+========== KEY FINDINGS (strongest to weakest) ==========
+1. INSURANCE STATUS is the single largest driver of vaccination uptake:
+   uninsured survivors were vaccinated at 9.4% vs. 56.3% for insured
+   (adjusted OR 5.94, 95% CI 1.42-24.8 for pneumococcal).
+
+2. LEUKEMIA VS. LYMPHOMA: lymphoma survivors have significantly LOWER
+   vaccination uptake than leukemia survivors, even after adjusting for
+   race, age, sex, insurance, poverty, education, usual source of care,
+   and region:
+     Pneumococcal: adjusted OR 0.62 (95% CI 0.41-0.92)
+     Flu:          adjusted OR 0.63 (95% CI 0.43-0.91)
+   Raw (unadjusted) rates: leukemia 59.6% pneumococcal / 66.9% flu vs.
+   lymphoma 52.4% pneumococcal / 59.7% flu. This is one of the
+   best-powered comparisons in the analysis (346 leukemia-only vs. 706
+   lymphoma-only survivors -- far larger than any racial subgroup here),
+   and the effect only reaches significance once demographic/SES
+   differences between the two groups are adjusted for. A plausible
+   explanation: leukemia treatment (e.g., induction/consolidation,
+   transplant workups) typically involves more prolonged, intensive
+   contact with hematology/oncology than many lymphoma regimens,
+   creating more opportunities for vaccination to be offered.
+
+3. Poverty (middle brackets), education, age, sex, and rurality all show
+   significant associations with pneumococcal and/or flu vaccination
+   (see "PRIMARY/SECONDARY ANALYSIS" below), but effect sizes are
+   smaller than insurance and cancer type.
+
+4. RACE/ETHNICITY: no significant differences between White, Black, or
+   Asian survivors on either outcome. AIAN and Other/Multiracial
+   estimates are NOT usable -- sample sizes (n=6 and n=15) are too
+   small, producing degenerate or extremely wide confidence intervals.
+   This dataset cannot answer the original racial-disparity research
+   question with any precision; a larger or racially-oversampled data
+   source would be needed.
 
 ========== FEASIBILITY CHECK ==========
-Leukemia survivors: 350
-Lymphoma survivors: 710
+Leukemia survivors: 350 (346 leukemia-only + 4 "Both")
+Lymphoma survivors: 710 (706 lymphoma-only + 4 "Both")
 Total heme survivors: 1056
 Pneumo vax Yes: 615   Pneumo vax No: 397
 Flu vax Yes: 681      Flu vax No: 357
@@ -23,6 +58,20 @@ Pneumococcal by race:      White 55.7% | Black 43.5% | Asian 44.6% | AIAN 37.3% 
 Flu by race:                White 63.1% | Black 50.9% | Asian 58.6% | AIAN 47.7% | Other/Multi 62.2%
 Pneumococcal by insurance:  Uninsured 9.4% | Insured 56.3%
 Pneumococcal by region:     Northeast 57.6% | Midwest 56.9% | South 50.8% | West 55.7%
+
+========== LEUKEMIA VS LYMPHOMA: DIRECT COMPARISON ==========
+Weighted vaccination prevalence:
+  Leukemia only (n=346): pneumococcal 59.6% (SE 3.3%) | flu 66.9% (SE 3.1%)
+  Lymphoma only (n=706): pneumococcal 52.4% (SE 2.4%) | flu 59.7% (SE 2.3%)
+Weighted mean age: leukemia 59.9 yrs | lymphoma 61.3 yrs
+
+Pneumococcal, unadjusted (ref = leukemia only): OR 0.75 (0.54-1.03) -- not significant
+Flu, unadjusted (ref = leukemia only):          OR 0.73 (0.53-1.01) -- not significant
+
+Pneumococcal, ADJUSTED (+ race/age/sex/insurance/poverty/education/usual care/region):
+  OR 0.62 (95% CI 0.41-0.92) -- SIGNIFICANT
+Flu, ADJUSTED:
+  OR 0.63 (95% CI 0.43-0.91) -- SIGNIFICANT
 
 ========== PRIMARY ANALYSIS: PNEUMOCOCCAL VACCINE (adjusted OR, 95% CI) ==========
 race_eth Black              0.79 (0.39-1.60)
@@ -52,7 +101,9 @@ educ HS/GED                 0.41 (0.22-0.74)
 rural (adjusted, pneumococcal): OR 1.74 (95% CI 1.21-2.51)
 rural (adjusted, flu):          OR 1.23 (95% CI 0.86-1.76)
 
-========== SUBGROUP: LEUKEMIA ONLY (n=350) vs LYMPHOMA ONLY (n=710) ==========
+========== SUBGROUP: LEUKEMIA ONLY (n=350) vs LYMPHOMA ONLY (n=710), BY RACE ==========
+(Race-within-cancer-type models; see caveats -- these are separate from
+the leukemia-vs-lymphoma comparison above and are underpowered for race.)
 Leukemia-only Other/Multiracial OR is degenerate (OR ~518,742, extremely
 wide CI) -- near-complete separation from very small cell counts. Do not
 report this estimate; the subgroup is underpowered for this category.

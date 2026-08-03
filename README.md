@@ -5,15 +5,30 @@ and influenza vaccination uptake among US adults with a history of leukemia
 or lymphoma, using pooled 2019-2024 National Health Interview Survey (NHIS)
 data via IPUMS.
 
+## Key finding
+
+**Lymphoma survivors have significantly lower vaccination uptake than
+leukemia survivors**, even after adjusting for race, age, sex, insurance,
+poverty, education, usual source of care, and region:
+pneumococcal adjusted OR 0.62 (95% CI 0.41–0.92); flu adjusted OR 0.63
+(95% CI 0.43–0.91). This is one of the best-powered comparisons in the
+analysis (346 leukemia-only vs. 706 lymphoma-only survivors), noticeably
+larger than any racial subgroup available here. See "Key findings" in
+`results/pooled_2019_2024_results.txt` for the full ranked list,
+including why insurance status remains the single largest driver
+overall and why the racial-disparity comparisons are underpowered.
+
 ## Contents
 
 - `scripts/nhis_vaccination_disparities.R` — full analysis pipeline: data
   loading, cleaning/recoding, survey-weighted descriptive tables, and
-  primary/secondary/sensitivity/subgroup regression models.
+  primary/secondary/sensitivity/subgroup regression models, including a
+  direct leukemia-vs-lymphoma comparison (Section 14).
 - `results/pooled_2019_2024_results.txt` — output from an actual run of
   the script against a real IPUMS NHIS extract (2019-2024, N=1,056 heme
-  survivors). Raw microdata itself is not included in this repo per
-  IPUMS redistribution terms — only the aggregated statistical output.
+  survivors), led by a ranked "Key findings" summary. Raw microdata
+  itself is not included in this repo per IPUMS redistribution terms —
+  only the aggregated statistical output.
 
 ## Data
 
