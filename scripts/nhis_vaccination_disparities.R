@@ -9,7 +9,10 @@
 # Primary exposure:  Race/ethnicity (RACENEW)
 # Confounders:       Age, sex, insurance, poverty, education,
 #                    usual source of care, region
-# Sensitivity:       Rurality (URBRRL, 2019-2022 only)
+# Sensitivity:       Rurality (URBRRL -- check the table(df$URBRRL, df$YEAR)
+#                    output in Section 3 for your extract; it has been
+#                    available for all of 2019-2024 in some extracts,
+#                    despite older guidance suggesting 2019-2022 only)
 #
 # NOTES:
 # - NHIS redesigned in 2019; restrict to 2019-2024 for comparability
@@ -58,8 +61,8 @@ cat("\n--- EDUC ---\n");      print(table(df$EDUC))
 cat("\n--- USUALPL ---\n");   print(table(df$USUALPL))
 cat("\n--- REGION ---\n");    print(table(df$REGION))
 cat("\n--- URBRRL ---\n");    print(table(df$URBRRL))
-cat("\n--- LONGWEIGHT > 0 in 2020 ---\n")
-print(table(df$YEAR == 2020 & df$LONGWEIGHT > 0))
+cat("\n--- SALNGPRTFLG (2020 longitudinal/partial sample flag) ---\n")
+print(table(df$YEAR == 2020 & df$SALNGPRTFLG == 1))
 
 
 # ----- 4. RESTRICT AND PREPARE POOLED DATASET -----
@@ -68,9 +71,16 @@ print(table(df$YEAR == 2020 & df$LONGWEIGHT > 0))
 df_pool <- df %>% filter(YEAR >= 2019)
 
 # Step 2: Drop 2020 longitudinal sample members to avoid double-counting
-# These are adults who completed both 2019 and 2020 interviews
+# These are adults who completed both 2019 and 2020 interviews.
+# NOTE: the flag for this is SALNGPRTFLG (not LONGWEIGHT, which is not
+# an IPUMS NHIS variable). SALNGPRTFLG distinguishes 2020 sample adults
+# in the longitudinal sample from those in the partial sample -- check
+# its value labels in your codebook once added to the extract, and
+# update the filter condition below to match the "longitudinal" code.
+# This extract did not include SALNGPRTFLG, so this filter is a no-op
+# placeholder; add SALNGPRTFLG to your IPUMS extract before running.
 df_pool <- df_pool %>%
-  filter(!(YEAR == 2020 & LONGWEIGHT > 0))
+  filter(!(YEAR == 2020 & SALNGPRTFLG == 1))
 
 # Step 3: Create pooled weight (divide by number of years = 6)
 # This gives average annual population estimates rather than cumulative
@@ -93,10 +103,12 @@ df_clean <- df_pool %>%
   mutate(AGE = as.numeric(AGE)) %>%
 
   # --- Heme survivor flag ---
-  # CNLEUKAG/CNLYMPAG: 1-95 = valid age at dx; 96=NIU; 97-99=unknown
+  # CNLEUKAG/CNLYMPAG: 00-85 = valid age at dx (00 = diagnosed under
+  # age 1); 96=NIU; 97-99=unknown. Use >= 0, not > 0, so diagnoses in
+  # infancy aren't dropped.
   mutate(
-    leuk_surv  = if_else(CNLEUKAG > 0 & CNLEUKAG < 96, 1, 0),
-    lymph_surv = if_else(CNLYMPAG > 0 & CNLYMPAG < 96, 1, 0),
+    leuk_surv  = if_else(CNLEUKAG >= 0 & CNLEUKAG <= 85, 1, 0),
+    lymph_surv = if_else(CNLYMPAG >= 0 & CNLYMPAG <= 85, 1, 0),
     heme_surv  = if_else(leuk_surv == 1 | lymph_surv == 1, 1, 0),
     heme_type  = case_when(
       leuk_surv == 1 & lymph_surv == 0 ~ "Leukemia only",
@@ -117,21 +129,23 @@ df_clean <- df_pool %>%
   ) %>%
 
   # --- Primary outcome: Pneumococcal vaccination ---
-  # SHOTPNUEV: 1=Yes, 2=No, 7=Refused, 8=Not ascertained, 9=Don't know
+  # SHOTPNUEV: 1=No, 2=Yes, 7=Refused, 8=Not ascertained, 9=Don't know
+  # (verified against IPUMS NHIS codebook; note the value order is
+  # No-then-Yes, opposite of what you might assume)
   mutate(
     pneumo_vax = case_when(
-      SHOTPNUEV == 1 ~ 1,
-      SHOTPNUEV == 2 ~ 0,
+      SHOTPNUEV == 2 ~ 1,
+      SHOTPNUEV == 1 ~ 0,
       TRUE ~ NA_real_
     )
   ) %>%
 
   # --- Secondary outcome: Influenza vaccination ---
-  # VACFLU12M: 1=Yes, 2=No, 7=Refused, 8=Not ascertained, 9=Don't know
+  # VACFLU12M: 1=No, 2=Yes, 7=Refused, 8=Not ascertained, 9=Don't know
   mutate(
     flu_vax = case_when(
-      VACFLU12M == 1 ~ 1,
-      VACFLU12M == 2 ~ 0,
+      VACFLU12M == 2 ~ 1,
+      VACFLU12M == 1 ~ 0,
       TRUE ~ NA_real_
     )
   ) %>%
@@ -145,7 +159,7 @@ df_clean <- df_pool %>%
       RACENEW == 200 ~ "Black",
       RACENEW == 300 ~ "AIAN",
       RACENEW == 400 ~ "Asian",
-      RACENEW %in% c(510, 530, 541, 542) ~ "Other/Multiracial",
+      RACENEW %in% c(500, 510, 520, 530, 540, 541, 542) ~ "Other/Multiracial",
       TRUE ~ NA_character_
     ),
     race_eth = factor(race_eth,
@@ -165,11 +179,13 @@ df_clean <- df_pool %>%
   ) %>%
 
   # --- Insurance ---
-  # HINOTCOV: 1=Uninsured, 2=Insured, 9=Unknown
+  # HINOTCOV: 1=No/has coverage (insured), 2=Yes/no coverage (uninsured),
+  # 9=Unknown. HINOTCOV is phrased as "has NO coverage", so its Yes/No
+  # values are the reverse of "insured" -- verified against codebook.
   mutate(
     insured = case_when(
-      HINOTCOV == 1 ~ 0,
-      HINOTCOV == 2 ~ 1,
+      HINOTCOV == 1 ~ 1,
+      HINOTCOV == 2 ~ 0,
       TRUE ~ NA_real_
     )
   ) %>%
@@ -192,18 +208,20 @@ df_clean <- df_pool %>%
   ) %>%
 
   # --- Education ---
-  # Codes confirmed from IPUMS codebook (2019-2024):
-  # 100/102-116=Less than HS; 201/202=HS/GED; 301-303=Some college
-  # 400=Bachelor's; 510/520/521/522=Graduate/Professional/Doctoral
+  # Codes confirmed from IPUMS codebook (2019-2024). Includes both the
+  # aggregate codes (100/200/300/500) and detailed sub-codes, since a
+  # given record uses one or the other depending on year/source:
+  # 100-116=Less than HS; 200-202=HS/GED; 300-303=Some college
+  # 400=Bachelor's; 500/510/520/521/522=Graduate/Professional/Doctoral
   # 997-999=Unknown
   mutate(
     educ_cat = case_when(
-      EDUC %in% c(100, 102, 103, 104, 105, 106, 107, 108,
+      EDUC %in% c(100, 101, 102, 103, 104, 105, 106, 107, 108,
                   109, 110, 111, 112, 113, 114, 115, 116) ~ "Less than HS",
-      EDUC %in% c(201, 202) ~ "HS/GED",
-      EDUC %in% c(301, 302, 303) ~ "Some college",
+      EDUC %in% c(200, 201, 202) ~ "HS/GED",
+      EDUC %in% c(300, 301, 302, 303) ~ "Some college",
       EDUC == 400 ~ "Bachelor's degree",
-      EDUC %in% c(510, 520, 521, 522) ~ "Graduate degree",
+      EDUC %in% c(500, 510, 520, 521, 522) ~ "Graduate degree",
       TRUE ~ NA_character_
     ),
     educ_cat = factor(educ_cat,
@@ -212,11 +230,13 @@ df_clean <- df_pool %>%
   ) %>%
 
   # --- Usual source of care ---
-  # USUALPL: 0=NIU, 1=Yes one place, 2=Yes more than one, 3=No, 7-9=Unknown
+  # USUALPL: 0=NIU, 1=No place, 2=Yes one place, 3=Yes more than one
+  # place, 7-9=Unknown (verified against codebook; original assumed
+  # 1/2 were both "Yes" and 3 was "No" -- it's the opposite)
   mutate(
     usual_care = case_when(
-      USUALPL %in% c(1, 2) ~ 1,
-      USUALPL == 3 ~ 0,
+      USUALPL %in% c(2, 3) ~ 1,
+      USUALPL == 1 ~ 0,
       TRUE ~ NA_real_
     )
   ) %>%
@@ -238,7 +258,9 @@ df_clean <- df_pool %>%
   # --- Rurality ---
   # URBRRL: 1=Large central metro, 2=Large fringe metro,
   #         3=Medium/small metro, 4=Non-metropolitan
-  # Available 2019-2022 only (missing 2023-2024)
+  # Verify year coverage for your extract via Section 3's
+  # table(df$URBRRL, df$YEAR) output before assuming any years are
+  # missing -- some extracts have it for all of 2019-2024.
   mutate(
     rural = case_when(
       URBRRL %in% c(1, 2) ~ 0,
@@ -293,8 +315,10 @@ svy_design <- svydesign(
 # Subset to heme survivors
 svy_heme <- subset(svy_design, heme_surv == 1)
 
-# Subset for rurality sensitivity (2019-2022 only)
-svy_rural <- subset(svy_design, heme_surv == 1 & YEAR <= 2022)
+# Subset for rurality sensitivity. Restrict to years where URBRRL is
+# non-missing for your extract -- check Section 3's URBRRL-by-YEAR
+# table first; don't assume 2019-2022 only.
+svy_rural <- subset(svy_design, heme_surv == 1 & !is.na(rural))
 
 # Subgroups
 svy_leuk  <- subset(svy_design, leuk_surv == 1)
@@ -319,7 +343,7 @@ tbl1 <- df_clean %>%
       insured        ~ "Has health insurance",
       usual_care     ~ "Has usual source of care",
       region         ~ "Census region",
-      rural_label    ~ "Rurality (2019-2022 only)",
+      rural_label    ~ "Rurality (years with non-missing URBRRL)",
       pneumo_vax     ~ "Pneumococcal vaccination, ever",
       flu_vax        ~ "Influenza vaccination, past 12 months",
       heme_type      ~ "Cancer type",
@@ -416,11 +440,11 @@ print(round(exp(cbind(OR = coef(model_flu_adj),
                       confint(model_flu_adj))), 3))
 
 
-# ----- 12. SENSITIVITY ANALYSIS — RURALITY (2019-2022 ONLY) -----
-cat("\n========== SENSITIVITY: RURALITY (2019-2022) ==========\n")
+# ----- 12. SENSITIVITY ANALYSIS — RURALITY -----
+cat("\n========== SENSITIVITY: RURALITY ==========\n")
 
 cat("N for rurality analysis:",
-    nrow(subset(df_clean, heme_surv == 1 & YEAR <= 2022)), "\n")
+    nrow(subset(df_clean, heme_surv == 1 & !is.na(rural))), "\n")
 
 model_pneumo_rural <- svyglm(
   pneumo_vax ~ race_eth + AGE + sex + insured + poverty_cat +
