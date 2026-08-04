@@ -128,6 +128,52 @@ These are unweighted discharge counts, not weighted national estimates
 -- `DISCWT` was not loaded/applied. See the results file for full
 caveats (any-listed-diagnosis vs. incident VTE, no pharmacy data, etc.).
 
+### Primary analysis: insurance-based disparities in IVC filter placement
+
+`scripts/nis_2023_ivc_filter_insurance_disparities.R` -- the actual
+research-question pipeline, built on the chunked streaming approach
+above. Research question: among hospitalized cancer patients with VTE,
+are there insurance-based disparities in IVC filter placement (Medicaid/
+uninsured/other-payer vs. privately insured), and do they persist after
+adjusting for clinical severity, comorbidities, and cancer type?
+Secondary: does the disparity vary by cancer type; do outcomes differ by
+insurance x filter status; are filters concentrated appropriately in
+bleeding-contraindicated patients across insurance groups?
+
+Race was dropped from the original research question after checking:
+`NIS_2023_Core`, `NIS_2023_Hospital`, and `NIS_2023_Severity` file
+structures were inspected and none contain a race/ethnicity variable in
+this extract.
+
+Key design points (see the script's header comments for full detail):
+- **Survey design correctness**: builds `svydesign()` from the *full*
+  6.74M-row sample (weight/strata/cluster retained for every row) and
+  uses `subset()` to reach the cancer+VTE cohort, rather than building
+  the design from the cohort alone -- the latter understates standard
+  errors for subpopulation estimates.
+- **Performance**: only the cheap cohort-defining checks (cancer/VTE/
+  prior-VTE-history) run on all 6.74M rows per chunk; the expensive
+  checks (cancer type, comorbidities, IVC filter, bleeding
+  contraindication) only run on the ~0.6% of rows that are actually in
+  the cohort. Saves a checkpoint (`.rds`) after the file scan so
+  re-running the script to fix a downstream modeling issue doesn't
+  require re-scanning the whole file.
+- **Bleeding contraindication is a covariate, not an exclusion** --
+  an earlier draft excluded these patients from the cohort entirely,
+  which would have made the appropriateness-of-use secondary question
+  unanswerable.
+- **Prior VTE history (Z86.71) is an exclusion**, even when an active
+  VTE code is also present on the same record (i.e. a genuine recurrent
+  VTE with noted history is still excluded) -- a known limitation of
+  claims-based VTE cohort algorithms, not a bug.
+- **Comorbidities** are a targeted 8-category panel (metastatic disease,
+  heart failure, CKD, liver disease, coagulopathy, obesity, diabetes,
+  COPD), not the full AHRQ Elixhauser Comorbidity Software algorithm.
+- **Severity** uses Core-available proxies (diagnosis count, elective/
+  emergent admission, ED entry, transfer-in status), not true APR-DRG
+  severity -- upgradable later if `NIS_2023_Severity`'s own SAS load
+  program is obtained from HCUP-US and merged in via `KEY_NIS`.
+
 ### Known issue caught before running against real data
 
 An earlier draft of the loading script used `data.table::fread()`,
