@@ -332,3 +332,17 @@ model_appropriateness <- svyglm(
 print(round(exp(cbind(OR = coef(model_appropriateness), confint(model_appropriateness))), 3))
 
 cat("\n========== DONE ==========\n")
+
+
+# ----- 8b. DIAGNOSTIC: cell counts for the insurance x cancer_type interaction -----
+# Secondary Q1's interaction model can produce degenerate coefficients
+# (near-zero or huge ORs) when some insurance x cancer_type cells have
+# very few discharges or very few/no IVC filter events. Check before
+# trusting any individual interaction coefficient.
+cat("\n========== DIAGNOSTIC: insurance x cancer_type cell counts ==========\n")
+cell_counts <- svy_cohort$variables %>%
+  filter(!is.na(insurance), !is.na(cancer_type)) %>%
+  count(insurance, cancer_type, ivc_filter) %>%
+  pivot_wider(names_from = ivc_filter, values_from = n, values_fill = 0,
+              names_prefix = "filter_")
+print(cell_counts, n = 100)
