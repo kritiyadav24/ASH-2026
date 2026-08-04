@@ -298,12 +298,39 @@ print(round(exp(cbind(OR = coef(model_adj), confint(model_adj))), 3))
 
 
 # ----- 8. SECONDARY Q1: DOES DISPARITY VARY BY CANCER TYPE? -----
+# NOTE: individual insurance x cancer_type interaction coefficients are
+# NOT reported here. Checking cell counts (below) showed some cells --
+# e.g. Breast cancer among Uninsured/Self-pay or Other-payer patients --
+# have zero or near-zero IVC filter events in this sample. A logistic
+# model can't produce a sane coefficient for a zero-event cell (this
+# produced six-figure odds ratios in an earlier draft); that's a real
+# data sparsity limitation, not something recoding can fix. Instead:
+# (1) a global design-based test of whether the interaction improves
+# fit at all, which remains valid even with sparse cells, and (2) a
+# descriptive stratified table with raw counts shown, so sparse/
+# unreliable cells are visible rather than hidden behind a precise-
+# looking but meaningless OR.
 cat("\n========== SECONDARY Q1: Insurance x cancer type interaction ==========\n")
+
+cat("\nCell counts (insurance x cancer_type x filter) -- flag anything sparse before interpreting:\n")
+cell_counts <- svy_cohort$variables %>%
+  filter(!is.na(insurance), !is.na(cancer_type)) %>%
+  count(insurance, cancer_type, ivc_filter) %>%
+  pivot_wider(names_from = ivc_filter, values_from = n, values_fill = 0,
+              names_prefix = "filter_")
+print(cell_counts, n = 100)
+
 model_interaction <- svyglm(
   ivc_filter ~ insurance * cancer_type + AGE + FEMALE,
   design = svy_cohort, family = quasibinomial()
 )
-print(round(exp(cbind(OR = coef(model_interaction), confint(model_interaction))), 3))
+cat("\nGlobal test of whether insurance x cancer_type interaction improves fit\n")
+cat("(valid even with sparse cells -- individual coefficients are not reported):\n")
+print(regTermTest(model_interaction, ~insurance:cancer_type))
+
+cat("\nDescriptive: weighted IVC filter rate by insurance within each cancer type\n")
+cat("(compare against the cell counts above -- don't trust rates from cells with < ~10 events):\n")
+print(svyby(~ivc_filter, ~cancer_type + insurance, svy_cohort, svymean, na.rm = TRUE))
 
 
 # ----- 9. SECONDARY Q2: MORTALITY BY INSURANCE x FILTER STATUS -----
@@ -332,17 +359,3 @@ model_appropriateness <- svyglm(
 print(round(exp(cbind(OR = coef(model_appropriateness), confint(model_appropriateness))), 3))
 
 cat("\n========== DONE ==========\n")
-
-
-# ----- 8b. DIAGNOSTIC: cell counts for the insurance x cancer_type interaction -----
-# Secondary Q1's interaction model can produce degenerate coefficients
-# (near-zero or huge ORs) when some insurance x cancer_type cells have
-# very few discharges or very few/no IVC filter events. Check before
-# trusting any individual interaction coefficient.
-cat("\n========== DIAGNOSTIC: insurance x cancer_type cell counts ==========\n")
-cell_counts <- svy_cohort$variables %>%
-  filter(!is.na(insurance), !is.na(cancer_type)) %>%
-  count(insurance, cancer_type, ivc_filter) %>%
-  pivot_wider(names_from = ivc_filter, values_from = n, values_fill = 0,
-              names_prefix = "filter_")
-print(cell_counts, n = 100)
