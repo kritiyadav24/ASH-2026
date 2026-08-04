@@ -95,12 +95,38 @@ thromboembolism (VTE) coding using the HCUP Nationwide Inpatient Sample
 (NIS) 2023 Core file. Currently at the data-loading/exploration stage --
 no research question or analysis pipeline has been built yet.
 
-- `scripts/nis_2023_core_load.R` -- correctly loads the HCUP NIS 2023
-  Core fixed-width ASCII file and does an initial explore of cancer
-  diagnosis and VTE diagnosis/procedure coding.
+- `scripts/nis_2023_core_cancer_vte_explore.R` -- **the script that
+  actually completed against the real 6.74M-row file.** Pure base R
+  (no tidyverse/vroom), reads the fixed-width file in 200,000-line
+  chunks with `readLines()`+`substr()`, so memory stays small and
+  progress prints continuously. See `results/nis_2023_core_cancer_vte_explore_results.txt`
+  for real output from running it.
+- `scripts/nis_2023_core_load.R` and `nis_2023_core_standalone.R` --
+  earlier tidyverse/vroom-based versions. Correct, but were too slow
+  (`read_fwf()`) or too memory-heavy (`vroom` materializing all
+  columns) to reliably finish on ordinary laptop hardware against the
+  full file -- kept for reference on the fixed-width column layout
+  and missing-value-sentinel handling, which the chunked version
+  re-derives inline from the same HCUP-verified positions.
 - `data_specs/SASload_NIS_2023_Core.SAS` -- HCUP's own load program for
   NIS 2023 Core, used as the source of truth for byte-level column
   positions (see below).
+
+### Real run results
+
+Against the actual NIS 2023 Core extract (6,743,716 discharge records):
+
+- 587,844 records (8.72%) had any cancer diagnosis (ICD-10-CM "C" code)
+- 203,314 records (3.01%) had any VTE diagnosis (I26/I80/I82)
+- 43,665 records had both -- i.e. **7.43% of cancer discharges also had
+  a VTE diagnosis**, in line with published cancer-associated VTE
+  prevalence ranges (a sanity check on the coding logic, not a
+  validated cohort)
+- 21,711 records had an IVC filter placement procedure
+
+These are unweighted discharge counts, not weighted national estimates
+-- `DISCWT` was not loaded/applied. See the results file for full
+caveats (any-listed-diagnosis vs. incident VTE, no pharmacy data, etc.).
 
 ### Known issue caught before running against real data
 

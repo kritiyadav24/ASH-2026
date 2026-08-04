@@ -1,0 +1,28 @@
+NIS 2023 Core -- Cancer / VTE coding explore
+Run against a real HCUP NIS 2023 Core ASCII extract (NIS_2023_Core.ASC,
+4.34 GB) using scripts/nis_2023_core_cancer_vte_explore.R.
+
+========== CANCER + VTE CODING SUMMARY ==========
+Total discharge records: 6,743,716
+Records with any cancer diagnosis (ICD-10-CM "C" code, any DX position): 587,844  (8.72%)
+Records with any VTE diagnosis (I26/I80/I82, any DX position): 203,314  (3.01%)
+Records with both cancer AND VTE diagnosis: 43,665
+Records with an IVC filter placement procedure (06H0-/06H3-/06H4-): 21,711
+
+Derived: among cancer-diagnosis discharges, 43,665 / 587,844 = 7.43% also
+had a VTE diagnosis listed -- consistent with published cancer-associated
+VTE prevalence ranges, which is a reasonable sanity check on the coding
+logic (not a validation against a gold-standard cohort).
+
+Caveats:
+- Unweighted discharge counts, not weighted national estimates. NIS
+  discharge weights (DISCWT) were not applied here -- this script does
+  not load that column. Apply DISCWT via a survey design before citing
+  any of these as population-level estimates.
+- "Any listed diagnosis" does not distinguish a VTE that developed during
+  this hospitalization from a pre-existing VTE noted as a comorbidity.
+- No pharmacy/medication data exists in NIS. The IVC filter count is a
+  weak procedure-level proxy for "did not receive anticoagulation" -- it
+  is not evidence of anticoagulation status either way.
+- No research question, cohort definition, or regression model has been
+  built yet. This is the data-loading/exploration stage only.
