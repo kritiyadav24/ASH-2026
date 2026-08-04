@@ -20,9 +20,10 @@
 # ============================================================
 
 library(tidyverse)
+library(vroom)
 
 # ----- 1. SET THIS to wherever your file actually is -----
-nis_file <- "~/Downloads/NIS_2023_Core.ASC"
+nis_file <- "~/Downloads/NIS_2023/NIS_2023_Core.ASC"
 
 # ----- 2. COLUMN LAYOUT (from HCUP's SASload_NIS_2023_Core.SAS) -----
 nis_2023_core_spec <- tibble::tribble(
@@ -174,14 +175,15 @@ col_types_str <- paste0(
   collapse = ""
 )
 
-nis <- read_fwf(
+nis <- vroom::vroom_fwf(
   nis_file,
-  col_positions = fwf_positions(
+  col_positions = vroom::fwf_positions(
     start     = nis_2023_core_spec$start,
     end       = nis_2023_core_spec$end,
     col_names = nis_2023_core_spec$var
   ),
-  col_types = col_types_str
+  col_types = col_types_str,
+  na = ""
 )
 
 dx_cols <- nis_2023_core_spec$var[str_detect(nis_2023_core_spec$var, "^I10_DX[0-9]+$")]
