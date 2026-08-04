@@ -87,3 +87,64 @@ for corrected output.
   especially in subgroup models, as too underpowered to interpret.
 - 2020 longitudinal sample members are not excluded in this run because
   `SALNGPRTFLG` wasn't in the source extract (see above).
+
+## NIS 2023 Core: Cancer + VTE coding (data loading, in progress)
+
+A second, separate project exploring cancer-associated venous
+thromboembolism (VTE) coding using the HCUP Nationwide Inpatient Sample
+(NIS) 2023 Core file. Currently at the data-loading/exploration stage --
+no research question or analysis pipeline has been built yet.
+
+- `scripts/nis_2023_core_load.R` -- correctly loads the HCUP NIS 2023
+  Core fixed-width ASCII file and does an initial explore of cancer
+  diagnosis and VTE diagnosis/procedure coding.
+- `data_specs/SASload_NIS_2023_Core.SAS` -- HCUP's own load program for
+  NIS 2023 Core, used as the source of truth for byte-level column
+  positions (see below).
+
+### Known issue caught before running against real data
+
+An earlier draft of the loading script used `data.table::fread()`,
+assuming `NIS_2023_Core.ASC` was delimited text. It is not: HCUP NIS
+Core files are fixed-width ASCII with no delimiter between fields --
+every discharge record is one 643-byte line, and each variable occupies
+a specific byte range documented only in HCUP's SAS/SPSS/Stata load
+program. `fread()` on this file wouldn't error; it would just silently
+misalign every column past the first few.
+
+The corrected script parses the exact byte positions straight out of
+`data_specs/SASload_NIS_2023_Core.SAS` (rather than hand-transcribing
+~125 start/end positions, which is exactly the kind of manual-
+transcription error this repo has caught before) and validates the
+parse -- widths sum to the declared `LRECL`, no gaps/overlaps between
+columns, no duplicate variable names -- before trusting it to read the
+real file. It also correctly recodes HCUP's numeric missing-value
+sentinels (e.g. `-99`/`-88`/`-66` for a 3-digit field) to `NA`, and
+fails loudly if it meets an informat it doesn't have a sentinel mapping
+for, rather than silently leaving garbage negative values in place.
+
+### Scope note: anticoagulation is not observable in NIS
+
+NIS is hospital discharge/administrative claims data -- it has no
+pharmacy or medication-administration file. Anticoagulant receipt
+cannot be directly observed. The closest available proxy is an IVC
+filter placement procedure code (ICD-10-PCS `06H0-`/`06H3-`/`06H4-`),
+which signals a decision not to (or inability to) anticoagulate, not
+evidence of anticoagulation itself. Any research question built on
+this data needs to be framed around what's actually codeable here
+(diagnosis and procedure codes), not medication receipt.
+
+### Requirements
+
+R packages: `tidyverse`.
+
+### Data
+
+Requires an HCUP NIS 2023 Core ASCII extract (`NIS_2023_Core.ASC`,
+purchased via the HCUP Central Distributor under a Data Use Agreement)
+plus its accompanying load program/file specifications (included here
+under `data_specs/`, and also public at
+https://hcup-us.ahrq.gov/db/nation/sasloadprog.jsp regardless of
+whether you have SAS installed). Update the `nis_file` path in the
+script to point to your local extract. Raw microdata itself is not
+included in this repo per HCUP's Data Use Agreement.
