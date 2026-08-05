@@ -63,7 +63,16 @@ options(survey.lonely.psu = "adjust")
 # obtained it. This assumes you've already produced a flat CSV; update
 # the path and swap in your own loader (e.g., a SAS-program-based reader)
 # if you're working from the raw ASCII files.
-nis <- fread("~/Downloads/NIS_2023_Core.csv")
+#
+# If the full NIS core file is too large to work with directly (multi-GB),
+# run 00_prefilter_nis_2023_local.R locally first -- it streams the file
+# via DuckDB, restricts to the 18-50/cancer cohort, and keeps only the
+# columns this script needs, producing a much smaller CSV. Set
+# PREFILTERED <- TRUE below if you're loading that output instead of the
+# raw core file; it skips the redundant age/cancer restriction in
+# Section 6a-6b since the pre-filter already applied it.
+PREFILTERED <- TRUE
+nis <- fread("~/Downloads/nis_2023_cancer_cohort_prefiltered.csv")
 
 cat("Rows loaded:", nrow(nis), "\n")
 cat("Columns:", ncol(nis), "\n")
@@ -163,18 +172,26 @@ transfusion_regex <- "^302"
 
 # ----- 6. COHORT CONSTRUCTION -----
 
-# --- 6a. Age and year restriction ---
-cohort <- nis %>%
-  filter(YEAR == 2023, AGE >= 18, AGE <= 50)
+# --- 6a-6b. Age/year restriction and principal-dx cancer cohort ---
+# Skipped when PREFILTERED = TRUE (Section 2), since
+# 00_prefilter_nis_2023_local.R already applied both restrictions before
+# this file was written out. Re-applying here is harmless either way
+# (both filters are idempotent) but the row-count logging below is only
+# meaningful the first time the restriction is actually applied.
+if (isTRUE(PREFILTERED)) {
+  cohort <- nis
+  cat("\nUsing pre-filtered cohort (age 18-50, principal-dx cancer already applied):",
+      nrow(cohort), "\n")
+} else {
+  cohort <- nis %>%
+    filter(YEAR == 2023, AGE >= 18, AGE <= 50)
+  cat("\nAfter age/year restriction:", nrow(cohort), "\n")
 
-cat("\nAfter age/year restriction:", nrow(cohort), "\n")
-
-# --- 6b. Principal-diagnosis cancer cohort (primary definition) ---
-cohort <- cohort %>%
-  filter(grepl(cancer_regex, I10_DX1, perl = TRUE))
-
-cat("After restricting to principal-dx cancer (C00-C97 excl. C44):",
-    nrow(cohort), "\n")
+  cohort <- cohort %>%
+    filter(grepl(cancer_regex, I10_DX1, perl = TRUE))
+  cat("After restricting to principal-dx cancer (C00-C97 excl. C44):",
+      nrow(cohort), "\n")
+}
 
 # Alternative ("any-listed" cancer, i.e., hospitalized WITH a cancer
 # diagnosis rather than primarily FOR cancer care) -- use as a sensitivity
