@@ -166,14 +166,11 @@ if (file.exists(checkpoint_rds)) {
     scalar_df$is_cancer_principal <- is_cancer_principal
     scalar_df$cohort <- is_cancer_principal & age_in_range
 
-    scalar_df$rural <- case_when(
-      scalar_df$PL_NCHS2 %in% 1:4 ~ "Urban",
-      scalar_df$PL_NCHS2 %in% 5:6 ~ "Rural",
-      TRUE ~ NA_character_
-    )
-    scalar_df$rural <- factor(scalar_df$rural, levels = c("Urban", "Rural"))
-
-    scalar_df$major_or_proc <- scalar_df$PCLASS_ORPROC == 1
+    # NOTE: rural/urban and major_or_proc are NOT derived here anymore --
+    # see Section 3b below, which runs on full_derived regardless of
+    # whether it came from a fresh scan or an existing checkpoint. This
+    # keeps a fix to those mappings (like the one below) effective on
+    # checkpoint reloads without needing to re-scan the whole file.
 
     cohort_mask <- scalar_df$cohort
 
@@ -216,6 +213,41 @@ if (file.exists(checkpoint_rds)) {
   saveRDS(full_derived, checkpoint_rds)
   cat("Saved checkpoint to", checkpoint_rds, "\n")
 }
+
+
+# ----- 3b. DERIVE rural/urban AND major_or_proc (runs every time, from ----
+# ----- the raw columns, whether full_derived just came from a fresh   ----
+# ----- scan or from the checkpoint) -----
+#
+# *** UNVERIFIED MAPPING -- CONFIRM BEFORE TRUSTING RESULTS ***
+# The first diagnostic run showed PL_NCHS2 has only two values: 21 and
+# 22 (not the expected 1-6 NCHS scale). Working hypothesis: PL_NCHS2 is
+# a binary-collapsed version of PL_NCHS (the "2" in the variable name =
+# 2 categories), keeping "lower number = more urban" ordering, so
+# 21 = Urban/Metro, 22 = Rural/Non-metro. This is supported by the
+# proportions (83% value 21 / 17% value 22, matching the actual US
+# urban/rural population split) but has NOT been confirmed against
+# HCUP's own documentation (network policy blocks hcup-us.ahrq.gov from
+# this environment). CHECK NIS_QuickStartGuide_2023.pdf (already in the
+# user's Downloads/NIS_2023 folder) for PL_NCHS2's real value labels
+# before trusting the direction of any rural-vs-urban finding below.
+cat("\n*** REMINDER: PL_NCHS2 mapping (21=Urban, 22=Rural) is an",
+    "UNVERIFIED best guess -- check NIS_QuickStartGuide_2023.pdf before",
+    "trusting rural/urban results. ***\n\n")
+
+full_derived <- full_derived %>%
+  mutate(
+    rural = case_when(
+      PL_NCHS2 == 21 ~ "Urban",
+      PL_NCHS2 == 22 ~ "Rural",
+      TRUE ~ NA_character_
+    ),
+    rural = factor(rural, levels = c("Urban", "Rural")),
+    major_or_proc = PCLASS_ORPROC == 1
+  )
+
+cat("Post-fix rural/urban distribution (should now be non-zero):\n")
+print(table(full_derived$rural, useNA = "always"))
 
 
 # ----- 4. SURVEY DESIGN + SUBPOPULATION SUBSET -----
