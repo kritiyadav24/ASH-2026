@@ -75,7 +75,12 @@ suppressMessages({
 })
 
 nis_file       <- "~/Downloads/NIS_2023/NIS_2023_Core.ASC"
-checkpoint_rds <- "~/Downloads/NIS_2023/nis_2023_transfusion_checkpoint.rds"
+# NEW checkpoint filename -- the old one doesn't have ELECTIVE/HCUP_ED/
+# TRAN_IN (added below for the acuity-by-insurance follow-up check), so
+# reusing the old checkpoint would silently give NAs for those columns.
+# This means the file scan WILL re-run once (a few minutes), unlike the
+# last two quick reruns that reused the existing checkpoint.
+checkpoint_rds <- "~/Downloads/NIS_2023/nis_2023_transfusion_checkpoint_v2.rds"
 
 
 # ----- 1. COLUMN LAYOUT (positions validated in earlier scripts) -----
@@ -87,9 +92,12 @@ full_spec <- tibble::tribble(
   "AGE", 20L, 22L, "numeric", "N3PF",
   "DIED", 29L, 30L, "numeric", "N2PF",
   "DISCWT", 31L, 41L, "numeric", "N11P7F",
+  "ELECTIVE", 54L, 55L, "numeric", "N2PF",
   "FEMALE", 56L, 57L, "numeric", "N2PF",
+  "HCUP_ED", 58L, 60L, "numeric", "N3PF",
   "LOS", 533L, 537L, "numeric", "N5PF",
   "PAY1", 542L, 543L, "numeric", "N2PF",
+  "TRAN_IN", 621L, 622L, "numeric", "N2PF",
   "ZIPINC_QRTL", 629L, 630L, "numeric", "N2PF"
 )
 pr_starts <- seq(355, 523, by = 7); pr_ends <- pr_starts + 6  # I10_PR1-25
@@ -140,6 +148,14 @@ if (file.exists(checkpoint_rds)) {
       clean_missing(vals, r$informat)
     }))
     names(scalar_df) <- full_spec$var
+
+    if (chunk_i == 1) {
+      cat("\nDIAGNOSTIC: ELECTIVE raw value distribution (first chunk) --\n")
+      cat("expected 0/1 only (standard HCUP convention: 0=non-elective, 1=elective).\n")
+      cat("If you see anything else, STOP and tell Claude before trusting the\n")
+      cat("acuity-by-insurance check below.\n")
+      print(table(scalar_df$ELECTIVE, useNA = "always"))
+    }
 
     scalar_df$cohort <- scalar_df$AGE >= 18 & !is.na(scalar_df$AGE)
     cohort_mask <- scalar_df$cohort
@@ -197,7 +213,15 @@ full_derived <- full_derived %>%
                         levels = c("Private", "Medicare", "Medicaid",
                                    "Uninsured/Self-pay", "No charge", "Other")),
     income_quartile = factor(ZIPINC_QRTL, levels = 1:4,
-                              labels = c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)"))
+                              labels = c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)")),
+    # Acuity-at-presentation proxies (same 3 variables used as severity
+    # covariates in the IVC filter script) -- added specifically to test
+    # whether "Other"-payer's elevated mortality OR reflects sicker-at-
+    # arrival patients (case-mix) rather than a treatment-during-stay
+    # disparity. non_elective = TRUE means an EMERGENT/urgent admission.
+    non_elective = ELECTIVE == 0,
+    ed_entry = HCUP_ED > 0 & !is.na(HCUP_ED),
+    transferred_in = TRAN_IN > 0 & !is.na(TRAN_IN)
   )
 
 
@@ -280,5 +304,44 @@ los_estimate_table <- round(cbind(Estimate = coef(model_los), confint(model_los)
 print(los_estimate_table)
 
 rm(model_los); gc()
+
+
+# ----- 8. FOLLOW-UP: IS "OTHER" PAYER'S HIGH MORTALITY OR EXPLAINED -----
+# ----- BY ACUITY AT PRESENTATION, NOT TREATMENT DURING THE STAY? -----
+# Splitting "Other" from "No charge" (section 4) showed Other alone
+# carries the elevated mortality OR (2.36, well-powered n=193,225,
+# 11,132 deaths -- not a sparse-cell artifact). This section checks
+# whether Other-payer admissions are simply sicker/more emergent at
+# arrival, which would point to case-mix confounding rather than a
+# treatment-during-stay disparity (the all-comers cohort has no
+# diagnosis/severity adjustment, so this is the closest available check).
+cat("\n========== FOLLOW-UP: acuity-at-presentation by insurance ==========\n")
+cat("(non_elective = emergent/urgent admission; ed_entry = entered via ED;\n")
+cat("transferred_in = transferred from another facility -- all three are\n")
+cat("proxies for how sick/acute a patient was AT ARRIVAL, not during the stay)\n\n")
+
+cat("Weighted non-elective (emergent) admission rate by insurance:\n")
+print(svyby(~non_elective, ~insurance, svy_cohort_tx, svymean, na.rm = TRUE))
+
+cat("\nWeighted ED-entry rate by insurance:\n")
+print(svyby(~ed_entry, ~insurance, svy_cohort_tx, svymean, na.rm = TRUE))
+
+cat("\nWeighted transferred-in rate by insurance:\n")
+print(svyby(~transferred_in, ~insurance, svy_cohort_tx, svymean, na.rm = TRUE))
+
+cat("\nAdjusted mortality model ADDING acuity proxies -- does Other's OR shrink?\n")
+cat("DIED ~ transfusion + age_group + FEMALE + insurance + income_quartile + non_elective + ed_entry + transferred_in:\n")
+model_mortality_acuity <- svyglm(
+  DIED ~ transfusion + age_group + FEMALE + insurance + income_quartile +
+    non_elective + ed_entry + transferred_in,
+  design = svy_cohort_tx, family = quasibinomial()
+)
+mortality_acuity_or_table <- round(exp(cbind(OR = coef(model_mortality_acuity), confint(model_mortality_acuity))), 3)
+print(mortality_acuity_or_table)
+cat("\nCompare insuranceOther's OR here to 2.357 from the model without acuity proxies above --\n")
+cat("if it drops substantially, acuity/case-mix explains a meaningful share of the disparity;\n")
+cat("if it barely moves, acuity at arrival does NOT explain it.\n")
+
+rm(model_mortality_acuity); gc()
 
 cat("\n========== ALL ANALYSES COMPLETE ==========\n")
