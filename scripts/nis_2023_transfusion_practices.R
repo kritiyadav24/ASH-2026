@@ -53,6 +53,20 @@
 # is more expensive than earlier scripts' cohort-only scans, but
 # the same chunked approach already proved it can handle a full
 # 6.74M-row scan.
+#
+# MEMORY NOTE: this cohort is ~9x larger than any earlier project
+# (nearly the whole adult file, not a diagnosis-restricted subset),
+# and fitting multiple large svyglm models back to back caused an
+# actual R session crash (fatal error, not a script bug) the first
+# time this ran -- each fitted svyglm object plus the survey design
+# plus the raw scan data all resident at once exceeded available
+# RAM. Two fixes are applied below: (1) all_chunks is rm()'d right
+# after being bound into full_derived, since keeping both is pure
+# duplication; (2) each fitted model is rm()'d + gc()'d immediately
+# after its results are printed, so at most one large model object
+# is in memory at a time. If crashes persist even with this, the
+# next lever is reducing model complexity (e.g. fewer age/income
+# categories) rather than more memory cleanup.
 # ============================================================
 
 suppressMessages({
@@ -145,6 +159,8 @@ if (file.exists(checkpoint_rds)) {
   cat("\nTotal rows scanned:", nrow(full_derived), "\n")
   cat("Total adult cohort rows:", sum(full_derived$cohort), "\n")
 
+  rm(all_chunks); gc()  # all_chunks duplicates everything now in full_derived -- free it
+
   dir.create(dirname(checkpoint_rds), showWarnings = FALSE, recursive = TRUE)
   saveRDS(full_derived, checkpoint_rds)
   cat("Saved checkpoint to", checkpoint_rds, "\n")
@@ -214,7 +230,10 @@ model_practice <- svyglm(
   transfusion ~ age_group + FEMALE + insurance + income_quartile,
   design = svy_cohort_tx, family = quasibinomial()
 )
-print(round(exp(cbind(OR = coef(model_practice), confint(model_practice))), 3))
+practice_or_table <- round(exp(cbind(OR = coef(model_practice), confint(model_practice))), 3)
+print(practice_or_table)
+
+rm(model_practice); gc()  # free before fitting the next large model -- see header note on the earlier crash
 
 
 # ----- 7. OUTCOME: IS TRANSFUSION ASSOCIATED WITH MORTALITY/LOS? -----
@@ -235,13 +254,19 @@ model_mortality <- svyglm(
   DIED ~ transfusion + age_group + FEMALE + insurance + income_quartile,
   design = svy_cohort_tx, family = quasibinomial()
 )
-print(round(exp(cbind(OR = coef(model_mortality), confint(model_mortality))), 3))
+mortality_or_table <- round(exp(cbind(OR = coef(model_mortality), confint(model_mortality))), 3)
+print(mortality_or_table)
+
+rm(model_mortality); gc()  # free before fitting the next large model
 
 cat("\nAdjusted LOS model -- LOS ~ transfusion + age_group + FEMALE + insurance + income_quartile:\n")
 model_los <- svyglm(
   LOS ~ transfusion + age_group + FEMALE + insurance + income_quartile,
   design = svy_cohort_tx, family = gaussian()
 )
-print(round(cbind(Estimate = coef(model_los), confint(model_los)), 3))
+los_estimate_table <- round(cbind(Estimate = coef(model_los), confint(model_los)), 3)
+print(los_estimate_table)
+
+rm(model_los); gc()
 
 cat("\n========== ALL ANALYSES COMPLETE ==========\n")
