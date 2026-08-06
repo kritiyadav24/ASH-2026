@@ -179,17 +179,23 @@ full_derived <- full_derived %>%
       TRUE ~ NA_character_
     ),
     age_group = factor(age_group, levels = c("18-44", "45-64", "65-79", "80+")),
+    # PAY1 5 ("No charge") and 6 ("Other") kept SEPARATE here (unlike the
+    # IVC filter script, which merged them) -- this was a direct follow-up
+    # test after the merged "Other" category showed an unusually high
+    # mortality OR (2.29) in the all-comers cohort, to check whether that
+    # was driven by one of the two sub-categories rather than both.
     insurance = case_when(
       PAY1 == 3 ~ "Private",
       PAY1 == 1 ~ "Medicare",
       PAY1 == 2 ~ "Medicaid",
       PAY1 == 4 ~ "Uninsured/Self-pay",
-      PAY1 %in% c(5, 6) ~ "Other",
+      PAY1 == 5 ~ "No charge",
+      PAY1 == 6 ~ "Other",
       TRUE ~ NA_character_
     ),
     insurance = factor(insurance,
                         levels = c("Private", "Medicare", "Medicaid",
-                                   "Uninsured/Self-pay", "Other")),
+                                   "Uninsured/Self-pay", "No charge", "Other")),
     income_quartile = factor(ZIPINC_QRTL, levels = 1:4,
                               labels = c("Q1 (lowest)", "Q2", "Q3", "Q4 (highest)"))
   )
@@ -248,6 +254,12 @@ print(svyby(~DIED, ~transfusion, svy_cohort_tx, svymean, na.rm = TRUE))
 
 cat("\nWeighted mean LOS by transfusion status:\n")
 print(svyby(~LOS, ~transfusion, svy_cohort_tx, svymean, na.rm = TRUE))
+
+cat("\nUnweighted n and death count by insurance (checking 'No charge' isn't too sparse to trust):\n")
+print(svy_cohort_tx$variables %>%
+        filter(!is.na(insurance)) %>%
+        count(insurance, DIED) %>%
+        pivot_wider(names_from = DIED, values_from = n, values_fill = 0, names_prefix = "died_"))
 
 cat("\nAdjusted mortality model -- DIED ~ transfusion + age_group + FEMALE + insurance + income_quartile:\n")
 model_mortality <- svyglm(
