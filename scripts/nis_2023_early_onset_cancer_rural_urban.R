@@ -17,13 +17,15 @@
 # history -- a deliberate scope decision, confirmed with the user.
 #
 # EXPOSURE: Rural vs. urban via PL_NCHS2 (NCHS Urban-Rural Code).
-# ASSUMPTION, NOT YET EMPIRICALLY CONFIRMED: codes 1-4 (Large
-# Central Metro / Large Fringe Metro / Medium Metro / Small Metro)
-# = Urban; codes 5-6 (Micropolitan / Noncore) = Rural. This is the
-# standard NCHS metro/non-metro convention, but this script's
-# diagnostic section (Step 3) prints the RAW value distribution
-# before trusting anything downstream -- check that it looks like
-# a clean 1-6 spread before proceeding past that point.
+# CONFIRMED by HCUP User Support (email, see project records): 2023
+# NIS replaced the old 6-category PL_NCHS with a simplified 2-category
+# PL_NCHS2 due to a change in which states participate in 2023 NIS.
+# PL_NCHS2 == 21 (metropolitan) is consistent with old PL_NCHS 1-4
+# (large central/large fringe/medium/small metro) = Urban; PL_NCHS2
+# == 22 (non-metropolitan) is consistent with old PL_NCHS 5-6
+# (micropolitan/noncore) = Rural. This was the working hypothesis
+# used throughout this script and is now empirically confirmed --
+# no results need to be revisited.
 #
 # OUTCOMES: in-hospital sepsis (A40-A41, R65.2x), VTE (I26 PE +
 # I82.4x acute lower-extremity DVT), AKI (N17), in-hospital
@@ -219,21 +221,16 @@ if (file.exists(checkpoint_rds)) {
 # ----- the raw columns, whether full_derived just came from a fresh   ----
 # ----- scan or from the checkpoint) -----
 #
-# *** UNVERIFIED MAPPING -- CONFIRM BEFORE TRUSTING RESULTS ***
+# *** MAPPING CONFIRMED BY HCUP USER SUPPORT (email reply) ***
 # The first diagnostic run showed PL_NCHS2 has only two values: 21 and
-# 22 (not the expected 1-6 NCHS scale). Working hypothesis: PL_NCHS2 is
-# a binary-collapsed version of PL_NCHS (the "2" in the variable name =
-# 2 categories), keeping "lower number = more urban" ordering, so
-# 21 = Urban/Metro, 22 = Rural/Non-metro. This is supported by the
-# proportions (83% value 21 / 17% value 22, matching the actual US
-# urban/rural population split) but has NOT been confirmed against
-# HCUP's own documentation (network policy blocks hcup-us.ahrq.gov from
-# this environment). CHECK NIS_QuickStartGuide_2023.pdf (already in the
-# user's Downloads/NIS_2023 folder) for PL_NCHS2's real value labels
-# before trusting the direction of any rural-vs-urban finding below.
-cat("\n*** REMINDER: PL_NCHS2 mapping (21=Urban, 22=Rural) is an",
-    "UNVERIFIED best guess -- check NIS_QuickStartGuide_2023.pdf before",
-    "trusting rural/urban results. ***\n\n")
+# 22 (not the expected 1-6 NCHS scale) -- 2023 NIS replaced PL_NCHS
+# with this simplified 2-category version due to a change in which
+# states participate in 2023 NIS. HCUP User Support confirmed directly:
+# PL_NCHS2 == 21 (metropolitan) = Urban, consistent with old PL_NCHS
+# 1-4; PL_NCHS2 == 22 (non-metropolitan) = Rural, consistent with old
+# PL_NCHS 5-6. The mapping used throughout this script was correct.
+cat("\nPL_NCHS2 mapping (21=Urban, 22=Rural) confirmed by HCUP User",
+    "Support -- see project records.\n\n")
 
 full_derived <- full_derived %>%
   mutate(
