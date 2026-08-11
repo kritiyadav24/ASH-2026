@@ -288,6 +288,15 @@ cat("\nCompare to the unadjusted OR above -- if similar, cancer-type mix is\n")
 cat("NOT explaining the age gap; if it shrinks a lot, mix matters.\n")
 rm(model_type_adj); gc()
 
+# Same model plus sex (FEMALE) -- closes the previously-flagged
+# no-sex-adjustment gap for the complication outcome specifically.
+model_type_sex_adj <- svyglm(any_complication ~ age_group + cancer_type + FEMALE,
+                              design = svy_cohort_cc, family = quasibinomial())
+cat("\nSame model plus sex (FEMALE) -- does adding sex change the picture?\n")
+type_sex_adj_or <- round(exp(cbind(OR = coef(model_type_sex_adj), confint(model_type_sex_adj))), 3)
+print(type_sex_adj_or["age_groupAYA (18-39)", , drop = FALSE])
+rm(model_type_sex_adj); gc()
+
 
 # ----- 6c. IMPROVEMENT 2: DOES METASTATIC STATUS MEDIATE THE GAP? -----
 # Tests one of the two proposed mechanisms directly (advanced disease at
@@ -376,6 +385,33 @@ cat("Compare to the unadjusted OR above -- same logic as the complication check:
 cat("if similar, cancer-type mix does NOT explain the mortality gap; if it\n")
 cat("shrinks toward/past 1, mix explains some or all of it.\n")
 rm(model_died_adj); gc()
+
+# ----- 9b. DOES METASTATIC STATUS EXPLAIN THE MORTALITY ADVANTAGE? -----
+# Mortality is the one finding that survived cancer-type adjustment --
+# this tests whether it's actually just "AYA patients present less
+# metastatic" (a disease-severity explanation) rather than something
+# about age itself. Also adds sex (FEMALE) as a covariate throughout,
+# closing the previously-flagged "no sex adjustment anywhere" gap.
+model_died_meta <- svyglm(DIED ~ age_group + has_metastasis + FEMALE,
+                           design = svy_cohort_cc, family = quasibinomial())
+cat("\nMetastatic-status-and-sex-ADJUSTED OR (AYA vs. Older-onset):\n")
+died_meta_or <- round(exp(cbind(OR = coef(model_died_meta), confint(model_died_meta))), 3)
+print(died_meta_or)
+cat("Compare age_groupAYA's OR here to the unadjusted OR above -- if similar,\n")
+cat("metastatic status/sex do NOT explain the mortality advantage.\n")
+rm(model_died_meta); gc()
+
+# Fully adjusted: cancer type + metastatic status + sex together
+model_died_full <- svyglm(DIED ~ age_group + cancer_type + has_metastasis + FEMALE,
+                           design = svy_cohort_cc, family = quasibinomial())
+cat("\nFULLY-ADJUSTED OR (cancer type + metastatic status + sex, AYA vs. Older-onset):\n")
+died_full_or <- round(exp(cbind(OR = coef(model_died_full), confint(model_died_full))), 3)
+print(died_full_or["age_groupAYA (18-39)", , drop = FALSE])
+cat("This is the strongest test: if the AYA mortality advantage survives ALL\n")
+cat("three adjustments together, it's independent of cancer type, disease\n")
+cat("severity at presentation, AND sex -- the most defensible version of\n")
+cat("this finding.\n")
+rm(model_died_full); gc()
 
 cat("\n========== SECONDARY: length of stay by age group ==========\n")
 print(svyby(~LOS, ~age_group, svy_cohort_cc, svymean, na.rm = TRUE))
