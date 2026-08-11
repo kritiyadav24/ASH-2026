@@ -62,6 +62,14 @@
 #      tests directly whether "AYA patients present more advanced"
 #      explains the complication gap, instead of only citing
 #      literature for that mechanism.
+#
+# THIRD ADDITION after #1 substantially reversed the primary
+# complication finding: applied the same unadjusted-vs-cancer-
+# type-adjusted check to the mortality and LOS secondary outcomes
+# (section 9) -- since cancer-type mix confounded the complication
+# result, it could equally be confounding these, and hadn't been
+# checked. Reuses the existing checkpoint (cancer_type already
+# computed), so no new file scan needed for this addition.
 # ============================================================
 
 suppressMessages({
@@ -348,11 +356,39 @@ analyze_complication("has_transfusion", "Transfusion")
 analyze_complication("has_mechvent", "Mechanical ventilation")
 
 
-# ----- 9. SECONDARY: MORTALITY AND LOS BY AGE GROUP -----
+# ----- 9. SECONDARY: MORTALITY AND LOS BY AGE GROUP, UNADJUSTED AND -----
+# ----- CANCER-TYPE-ADJUSTED (same check that reversed the primary   -----
+# ----- complication finding -- applied here since we can't assume   -----
+# ----- these secondary findings are free of the same confounding)   -----
 cat("\n========== SECONDARY: mortality by age group ==========\n")
 print(svyby(~DIED, ~age_group, svy_cohort_cc, svymean, na.rm = TRUE))
 
+model_died_unadj <- svyglm(DIED ~ age_group, design = svy_cohort_cc, family = quasibinomial())
+cat("\nUnadjusted OR (AYA vs. Older-onset, ref = Older-onset):\n")
+print(round(exp(cbind(OR = coef(model_died_unadj), confint(model_died_unadj))), 3))
+rm(model_died_unadj); gc()
+
+model_died_adj <- svyglm(DIED ~ age_group + cancer_type, design = svy_cohort_cc, family = quasibinomial())
+cat("\nCancer-type-ADJUSTED OR (AYA vs. Older-onset):\n")
+died_adj_or <- round(exp(cbind(OR = coef(model_died_adj), confint(model_died_adj))), 3)
+print(died_adj_or["age_groupAYA (18-39)", , drop = FALSE])
+cat("Compare to the unadjusted OR above -- same logic as the complication check:\n")
+cat("if similar, cancer-type mix does NOT explain the mortality gap; if it\n")
+cat("shrinks toward/past 1, mix explains some or all of it.\n")
+rm(model_died_adj); gc()
+
 cat("\n========== SECONDARY: length of stay by age group ==========\n")
 print(svyby(~LOS, ~age_group, svy_cohort_cc, svymean, na.rm = TRUE))
+
+model_los_unadj <- svyglm(LOS ~ age_group, design = svy_cohort_cc, family = gaussian())
+cat("\nUnadjusted difference (AYA vs. Older-onset, ref = Older-onset):\n")
+print(round(cbind(Estimate = coef(model_los_unadj), confint(model_los_unadj)), 3))
+rm(model_los_unadj); gc()
+
+model_los_adj <- svyglm(LOS ~ age_group + cancer_type, design = svy_cohort_cc, family = gaussian())
+cat("\nCancer-type-ADJUSTED difference (AYA vs. Older-onset):\n")
+los_adj_est <- round(cbind(Estimate = coef(model_los_adj), confint(model_los_adj)), 3)
+print(los_adj_est["age_groupAYA (18-39)", , drop = FALSE])
+rm(model_los_adj); gc()
 
 cat("\n========== ALL ANALYSES COMPLETE ==========\n")
