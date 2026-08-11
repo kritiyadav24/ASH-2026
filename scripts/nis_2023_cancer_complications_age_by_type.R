@@ -49,6 +49,19 @@
 # ARCHITECTURE: same chunked base-R streaming approach as every
 # other script in this repo. NEW checkpoint (broader age range,
 # all cancer types, complication codes all in one scan).
+#
+# TWO IMPROVEMENTS ADDED after the first version of this script
+# produced a solid primary finding (AYA OR 1.20 for any
+# complication, cancer-type interaction p=0.46):
+#   1. A cancer-type-ADJUSTED model (not just the interaction
+#      test) -- controls for AYA and older-onset patients having a
+#      different cancer-type mix to begin with, which the
+#      interaction test alone doesn't rule out.
+#   2. A metastatic-status mediation test, reusing the C77-C79
+#      code from the AYA metastatic-at-presentation script --
+#      tests directly whether "AYA patients present more advanced"
+#      explains the complication gap, instead of only citing
+#      literature for that mechanism.
 # ============================================================
 
 suppressMessages({
@@ -57,7 +70,10 @@ suppressMessages({
 })
 
 nis_file       <- "~/Downloads/NIS_2023/NIS_2023_Core.ASC"
-checkpoint_rds <- "~/Downloads/NIS_2023/nis_2023_cancer_complications_by_type_checkpoint.rds"
+# NEW checkpoint filename -- the old one doesn't have has_metastasis (added
+# below to test whether metastatic-at-presentation mediates the AYA
+# complication gap), so reusing it would silently give NAs for that column.
+checkpoint_rds <- "~/Downloads/NIS_2023/nis_2023_cancer_complications_by_type_v2_checkpoint.rds"
 
 
 # ----- 1. COLUMN LAYOUT (positions validated in earlier scripts) -----
@@ -95,6 +111,7 @@ sepsis_regex      <- "^(A4[01]|R652)"
 vte_regex         <- "^(I26|I824)"
 transfusion_regex <- "^302"
 mechvent_regex    <- "^5A19"
+metastasis_regex  <- "^C7[789]"  # same code used in the AYA metastatic-at-presentation script
 
 colorectal_regex <- "^C(18|19|20)"
 breast_regex     <- "^C50"
@@ -152,6 +169,7 @@ if (file.exists(checkpoint_rds)) {
     scalar_df$has_vte <- NA
     scalar_df$has_transfusion <- NA
     scalar_df$has_mechvent <- NA
+    scalar_df$has_metastasis <- NA
     scalar_df$cancer_type <- NA_character_
 
     if (any(cohort_mask)) {
@@ -163,6 +181,7 @@ if (file.exists(checkpoint_rds)) {
       scalar_df$has_vte[cohort_mask]         <- any_match(sub_lines, dx_starts, dx_ends, vte_regex)
       scalar_df$has_transfusion[cohort_mask] <- any_match(sub_lines, pr_starts, pr_ends, transfusion_regex)
       scalar_df$has_mechvent[cohort_mask]    <- any_match(sub_lines, pr_starts, pr_ends, mechvent_regex)
+      scalar_df$has_metastasis[cohort_mask]  <- any_match(sub_lines, dx_starts, dx_ends, metastasis_regex)
 
       scalar_df$cancer_type[cohort_mask] <- case_when(
         grepl(colorectal_regex, dx1_cohort) ~ "Colorectal",
@@ -240,9 +259,50 @@ cat("\nCell counts (age_group x any_complication):\n")
 print(cell_counts_overall)
 
 model_overall <- svyglm(any_complication ~ age_group, design = svy_cohort_cc, family = quasibinomial())
-cat("\nAdjusted OR (AYA vs. Older-onset, ref = Older-onset):\n")
+cat("\nUnadjusted OR (AYA vs. Older-onset, ref = Older-onset):\n")
 print(round(exp(cbind(OR = coef(model_overall), confint(model_overall))), 3))
 rm(model_overall); gc()
+
+
+# ----- 6b. IMPROVEMENT 1: ADJUST FOR CANCER TYPE MIX -----
+# The interaction test in section 7 checks whether the age gap VARIES by
+# cancer type, but that doesn't control for AYA and older-onset patients
+# having a different cancer-type MIX to begin with (e.g. some cancer types
+# in this cohort skew younger, others older). Adding cancer_type as a
+# covariate isolates the age effect from that mix effect.
+cat("\n========== IMPROVEMENT 1: adjusted for cancer type mix ==========\n")
+model_type_adj <- svyglm(any_complication ~ age_group + cancer_type,
+                          design = svy_cohort_cc, family = quasibinomial())
+cat("Adjusted OR (AYA vs. Older-onset, controlling for cancer type mix):\n")
+type_adj_or <- round(exp(cbind(OR = coef(model_type_adj), confint(model_type_adj))), 3)
+print(type_adj_or["age_groupAYA (18-39)", , drop = FALSE])
+cat("\nCompare to the unadjusted OR above -- if similar, cancer-type mix is\n")
+cat("NOT explaining the age gap; if it shrinks a lot, mix matters.\n")
+rm(model_type_adj); gc()
+
+
+# ----- 6c. IMPROVEMENT 2: DOES METASTATIC STATUS MEDIATE THE GAP? -----
+# Tests one of the two proposed mechanisms directly (advanced disease at
+# presentation) instead of only citing literature for it. If AYA patients
+# present metastatic more often AND the complication OR shrinks once
+# has_metastasis is added, that's real evidence for this pathway; if the
+# OR barely moves, it points more toward the dose-intensity/physiologic-
+# reserve explanation instead.
+cat("\n========== IMPROVEMENT 2: does metastatic status mediate the gap? ==========\n")
+cat("\nMetastatic-at-presentation rate by age group (context for the test below):\n")
+print(svyby(~has_metastasis, ~age_group, svy_cohort_cc, svymean, na.rm = TRUE))
+
+model_meta_adj <- svyglm(any_complication ~ age_group + has_metastasis,
+                          design = svy_cohort_cc, family = quasibinomial())
+cat("\nAdjusted OR (AYA vs. Older-onset, controlling for metastatic status):\n")
+meta_adj_or <- round(exp(cbind(OR = coef(model_meta_adj), confint(model_meta_adj))), 3)
+print(meta_adj_or)
+cat("\nCompare age_groupAYA's OR here to the unadjusted OR above -- if it\n")
+cat("drops substantially, metastatic-at-presentation explains a meaningful\n")
+cat("share of the gap; if it barely moves, metastatic status does NOT\n")
+cat("explain it (points toward the dose-intensity/physiologic-reserve\n")
+cat("explanation instead).\n")
+rm(model_meta_adj); gc()
 
 
 # ----- 7. DOES THE AGE GAP VARY BY CANCER TYPE? -----
