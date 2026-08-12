@@ -285,7 +285,7 @@ cell_counts_type <- svy_cohort_cancer_only$variables %>%
   filter(!is.na(cancer_type)) %>%
   count(cancer_type, DIED)
 cat("\nCell counts (cancer_type x DIED) -- flag anything sparse before interpreting:\n")
-print(cell_counts_type, n = 30)
+print(as.data.frame(cell_counts_type))  # as.data.frame() avoids a tibble print quirk seen in long-running sessions
 
 cat("\nDescriptive: mortality rate by cancer type\n")
 print(svyby(~DIED, ~cancer_type, svy_cohort_cancer_only, svymean, na.rm = TRUE))
