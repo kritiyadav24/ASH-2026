@@ -55,6 +55,22 @@ if (!file.exists(checkpoint_rds)) {
 full_derived <- readRDS(checkpoint_rds)
 cat("Loaded stroke-cancer checkpoint:", nrow(full_derived), "total rows\n")
 
+# The checkpoint is saved BEFORE cancer_status is derived in the original
+# script (that derivation happens in-memory only) -- re-derive it here.
+full_derived <- full_derived %>%
+  mutate(
+    cancer_status = case_when(
+      cohort & has_cancer ~ "Cancer",
+      cohort & !has_cancer ~ "No cancer",
+      TRUE ~ NA_character_
+    ),
+    cancer_status = factor(cancer_status, levels = c("No cancer", "Cancer")),
+    cancer_type = factor(cancer_type,
+                          levels = c("Colorectal", "Breast", "Pancreatic", "Esophageal",
+                                     "Ovarian/Gynecologic", "Lung", "Melanoma", "Lymphoma",
+                                     "Leukemia", "Other"))
+  )
+
 
 # ----- 1. LOAD + VERIFY HOSPITAL FILE -----
 hosp_lines <- readLines(hospital_file)
